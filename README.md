@@ -79,9 +79,167 @@ docker images
 Você deve encontrar um resultado parecido com este abaixo. Se tudo funcionou corretamente então o fabric está pronto para uso.
 
 Na parte 2 deste tutorial vamos mostrar como realizar a configuração inicial de uma business network no Fabric, desenvolvimento e deploy de chaincodes, entre outros aspectos.
-About
 
- # 2. Instalação do MongoDB Ubuntu 22.04
+## 2. Certificate Generation(MSP/ TLS) In Hyperledger Fabric Blockchain
+Chandramohan Jagtap
+Geek Culture
+Chandramohan Jagtap
+
+Security Key
+Introduction
+In this article, we are going to see MSP/TLS certificate generation for organizations (Peers, Users, Admins) and orderers. Will see how to generate certificates using cryptogen and Certificate Authority.
+
+Audience
+Hyperledger fabric operators, admins. This is a practical hands-on article to generate fabric network certificates for MSP and TLS. for the beginner, I would like to advise please go through some basic concepts of Hyperledger fabric.
+
+Note: The article not recommended for a HLF beginners.
+
+Prerequisites
+Basic understanding of Hyperledger Fabric Blockchain.
+Basic understanding of PKI system, SSL, TLS certificates.
+Basic shell commands, Shell Scripting, etc.
+System Requirements
+Curl.
+Openssl.
+Docker — version 17.06.2 or greater
+Docker Compose — version 1.28.5 or greater
+Setup Steps
+Download/Install Hyperledger Fabric binaries and CA.
+Certificate generation using Cryptogen tool
+Setup of fabric CA server.
+Certificate generation using Certificate Authority(CA)
+Clean up.
+Summary.
+Download Fabric Binaries.
+First, download HLF binaries. Follow the below instructions to download. For more information, you can visit HLF official doc here
+
+Syntax.
+
+curl -sSL https://bit.ly/2ysbOFE | bash -s -- <fabric_version> <fabric-ca_version>
+Installation: Copy the following command and paste it into the terminal.
+
+curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.2.4 1.5.2
+After downloading, You can see the bin directory inside fabric samples. This directory contains HLF binaries. Verify your binary version as follows. For simplicity, I copied all binaries into /usr/local/bin directory so we don’t need to export the bin path.
+
+
+Here, I am using fabric 2.2.4 version and for CA 1.5.2
+
+Cryptogen
+cryptogen is a utility tool to generate Hyperledger Fabric certificates and keys. It is not recommended to use in the production networks.
+Cryptoyamlgen offers the below commands
+help: provides help for cryptogen tool.
+generate: command is used to generate certificates for the existing network file.
+showtemplate: show template command shows the network template in YAML format.
+version: shows the cryptogen binary version.
+extend: extends the existing network configuration file and adds extra organization to it.
+Let’s create a network file using cryptogen showtemplate command as follows.
+
+cryptogen showtemplate > mynetwork.yaml
+
+Here, we can see that our network file got generated, It contains a solo orderer and two organizations configuration.
+
+Note: You are free to modify mynetwork.yaml file and see the changes into generated certificates.I am not going to explain content of network file.
+
+Let’s generate certificates for this network configuration.
+Now we are using cryptogen generate command to generate certificates for organizations, orderer.
+
+cryptogen generate --config=./mynetwork.yaml
+
+Orderer certificates
+In the above picture, we can see that Orderer MSP got generated, Orderer Admin got generated.
+
+Let’s see the CA certificate of orderer admin.
+
+openssl x509 -in crypto-config/ordererOrganizations/example.com/users/Admin@example.com/msp/cacerts/ca.example.com-cert.pem -text
+
+CA-certificate
+Let’s see the TLS certificate of orderer admin.
+
+openssl x509 -in crypto-config/ordererOrganizations/example.com/users/Admin@example.com/tls/ca.crt -text
+
+TLS-certificate
+Cryptogen tool did a lot of work for us. It created MSP and TLS certificates.
+
+Similarly, It created Org1 AND Org2, MSP, and TLS certificates.
+
+
+Org1 AND Org2 MSP, TLS
+Certificate Authority (CA)
+In a blockchain, every actor who wishes to interact with the network needs an identity. It’s the CA that provides a verifiable digital identity.
+
+CA-admin/bootstrap identity creates a request for an identity certificate.
+
+Image source: Hyperledger Fabric official doc
+CA issues digital certificates, which contain private and public keys for identity. ( In the cryptogen material, we can see that there are some private and public key issues for the admin user)
+Similarly, we have to register all the peers, admins, users to CA. (In the case of cryptogen, the tool did everything, Here we have to generate manually)
+
+Image Source: Hyperledger Fabric official doc
+After registration, we need to enroll them to get the digital certificates and construct MSP, TLS directories for our blockchain network.
+Host/Deploy CA
+
+Here, I am deploying CA on localhost. You can deploy it in the production/test VMs.
+Clone the below repository.
+git clone https://github.com/cmjagtap/HLF-Certification-Generation
+Use the following command to deploy and start the CA.
+
+CA-deployment
+Let’s generate certificates for org1.
+We are using fabric-ca-client binary to interact with CA-server.
+
+First, we have to enroll the bootstrap identity of CA.
+
+script 1_registerIdentities.sh is used to enroll CA-bootstrap identity and register identities of org1.
+export FABRIC_CA_CLIENT_HOME, this environment variable acts as an MSP of bootstrap identity.
+mkdir -p crypto-config-ca/peerOrganizations/org1.example.com
+export FABRIC_CA_CLIENT_HOME=${PWD}/crypto-config-ca/peerOrganizations/org1.example.com
+enrollCAAdmin() {
+fabric-ca-client enroll -u https://admin:adminpw@localhost:7054 --caname ca.org1.example.com --csr.names C=IN,ST=MH,L=Pune,O=org1,OU=peer  --tls.certfiles ${PWD}/fabric-ca/org1/tls-cert.pem
+}
+Then we use enroll command with some extra parameters of x509 certificates.
+You can explore, fabric-ca-client command on official website.
+
+Register all identities, that we need for organization.
+Here, I am using single peer and admin identity
+registerIdentities() {
+fabric-ca-client register --caname ca.org1.example.com --id.name peer0 --id.secret peer0pw --id.type peer --csr.names C=IN,ST=MH,L=Pune,O=$orgname,OU=peer  --tls.certfiles ${PWD}/fabric-ca/org1/tls-cert.pem
+fabric-ca-client register --caname ca.org1.example.com --id.name org1admin --id.secret org1adminpw --id.type admin --csr.names C=IN,ST=MH,L=Pune,O=$orgname,OU=admin  --tls.certfiles ${PWD}/fabric-ca/org1/tls-cert.pem
+}
+After executing the script you will see the below output.
+
+
+Register Identities
+We can see that our identities got registered.
+
+Let’s generate MSP and TLS for peer0, admin
+
+script 2_generateMSP.sh is used to generate MSP for peer0, admin, and TLS for peer0.
+The generation of MSP and TLS looks the same. But, while enrolling TLS we have to add an extra flag — enrollment. profile tls.
+fabric-ca-client enroll -u https://peer0:peer0pw@localhost:7054 --caname ca.org1.example.com -M ${PWD}/crypto-config-ca/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/msp  --csr.names C=IN,ST=MH,L=Pune,O=org1,OU=peer  --csr.hosts peer0.org1.example.com --tls.certfiles ${PWD}/fabric-ca/org1/tls-cert.pem
+fabric-ca-client enroll -u https://peer0:peer0pw@localhost:7054 --caname ca.org1.example.com -M ${PWD}/crypto-config-ca/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls --enrollment.profile tls  --csr.names C=IN,ST=MH,L=Pune,O=org1,OU=peer  --csr.hosts peer0.org1.example.com --csr.hosts localhost --tls.certfiles ${PWD}/fabric-ca/org1/tls-cert.pem
+Enroll org1 admin
+fabric-ca-client enroll -u https://org1admin:org1adminpw@localhost:7054 --caname ca.org1.example.com -M ${PWD}/crypto-config-ca/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp  --csr.names C=IN,ST=MH,L=Pune,O=org1,OU=admin  --tls.certfiles ${PWD}/fabric-ca/org1/tls-cert.pem
+
+MSP generation
+
+Peer0 signcert
+Note: We have to generate both MSP, TLS requests manually. Here, I am using single CA for both MSP and TLS, you can host another CA for TLS generation.
+
+Similarly, We have to generate MSP, TLS certificates for all the organizations and Orderers.
+Clean up
+Execute the following command to remove CA-docker container and its volume
+docker-compose -f ca-org1.yaml down -v
+Delete the generated crypto-config directories.
+Summary
+We have seen, how cryptogen tool works and helps us to set up a faster test HLF network. Also, we look into HLF CA and complete the enrolment process to generate MSP and TLS for the organizations.
+
+Hyperledger Fabric
+Certificate Authority
+Cryptogen
+Msp
+Tls
+
+
+ # 3. Instalação do MongoDB Ubuntu 22.04
 
 https://redessy.com/como-instalar-mongodb-en-ubuntu-22-04/?expand_article=1&expand_article=1&expand_article=1
 
